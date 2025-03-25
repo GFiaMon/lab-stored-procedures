@@ -13,9 +13,12 @@ use sakila;
     join film_category on film_category.film_id = film.film_id
     join category on category.category_id = film_category.category_id
     where category.name = "Action"
-    group by first_name, last_name, email;
+    -- group by first_name, last_name, email
+    ;
 
 -- step1:
+drop procedure if exists GetActionMovieRenters ;
+
 
 DELIMITER //
 create procedure GetActionMovieRenters()
@@ -37,7 +40,7 @@ CALL GetActionMovieRenters();
         
 -- Now keep working on the previous stored procedure to make it more dynamic. Update the stored procedure in a such manner that it can take a string argument for the category name and return the results for all customers that rented movie of that category/genre. For eg., it could be `action`, `animation`, `children`, `classics`, etc.
 
-drop procedure if exists GetActionMovieRenters ;
+drop procedure if exists GetMovieRentersByCategory ;
 
 DELIMITER //
 create procedure GetMovieRentersByCategory(IN categoryName VARCHAR(50)) 
@@ -59,7 +62,7 @@ CALL GetMovieRentersByCategory('Animation');
 
 -- Write a query to check the number of movies released in each movie category. Convert the query in to a stored procedure to filter only those categories that have movies released greater than a certain number. Pass that number as an argument in the stored procedure.
 
-		-- step 1
+		-- Option 1 step 1
 SELECT 
     category_id, category.name, COUNT(film_id) AS films_x_cat
 FROM
@@ -71,8 +74,8 @@ FROM
 GROUP BY category_id
 HAVING films_x_cat > 60
 ;
-		-- step 2
 
+		-- Option 1 step 2
 drop procedure if exists MoviesByCategory;
 		
 DELIMITER //
@@ -93,3 +96,58 @@ END;
 DELIMITER ;
 
 CALL MoviesByCategory(68);
+
+		-- Option 2 step 1 with CTE and Window Function
+SELECT *
+FROM (
+    SELECT 
+        category.category_id, 
+        category.name, 
+        COUNT(film.film_id) OVER (PARTITION BY category.category_id, category.name 
+ ) AS films_x_cat
+    FROM category
+    JOIN film_category USING (category_id)
+    JOIN film USING (film_id)
+) AS subquery
+WHERE films_x_cat > 60;
+
+		
+        -- with CTE 	
+WITH FilmCounts AS (
+SELECT 
+    category_id,
+    category.name,
+    COUNT(film_id) OVER(PARTITION BY category_id) as film_x_cat
+FROM
+	category
+JOIN film_category USING(category_id)
+)
+SELECT DISTINCT category_id, name, film_x_cat
+FROM FilmCounts
+where film_x_cat > 60
+;
+
+		-- Option 2 step 2
+drop procedure if exists MoviesByCategory2;
+		
+DELIMITER //
+CREATE PROCEDURE MoviesByCategory2 (in nrFilms varchar(10))
+BEGIN
+WITH countFilms AS (
+SELECT 
+    category_id, category.name, 
+    COUNT(film_id) OVER(PARTITION BY category_id) AS films_x_cat
+FROM
+    category
+        JOIN
+    film_category USING (category_id)
+)
+SELECT DISTINCT category_id, name, films_x_cat
+FROM CountFilms
+WHERE films_x_cat > nrFilms
+;
+END
+//
+DELIMITER ;
+
+CALL MoviesByCategory2(8);
